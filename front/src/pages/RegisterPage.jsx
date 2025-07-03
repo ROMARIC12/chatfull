@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 
 const RegisterPage = () => {
   const [name, setName] = useState('');
-  // CHANGEMENT ICI : 'phone' remplacé par 'email'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,7 +21,6 @@ const RegisterPage = () => {
     }
     setLoading(true);
     try {
-      // CHANGEMENT ICI : passage de 'email' à la fonction register
       await register(name, email, password);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Registration failed');
@@ -35,13 +33,28 @@ const RegisterPage = () => {
     <Box
       sx={{
         display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
+        flexDirection: 'column', // Important pour centrer verticalement avec justifyContent
+        justifyContent: 'center', // Centre verticalement le contenu
+        alignItems: 'center',   // Centre horizontalement le contenu
+        height: '100vh',        // Prend 100% de la hauteur du viewport
+        width: '100vw',         // Prend 100% de la largeur du viewport
         backgroundColor: '#f4f6f8',
+        padding: 2,             // Padding pour éviter que le contenu ne touche les bords sur mobile
+        boxSizing: 'border-box', // S'assurer que le padding est inclus dans la largeur/hauteur
       }}
     >
-      <Paper elevation={3} sx={{ padding: 4, borderRadius: 2, maxWidth: 400, width: '100%' }}>
+      <Paper
+        elevation={3}
+        sx={{
+          padding: 4,
+          borderRadius: 2,
+          maxWidth: 400,
+          width: '100%',
+          // margin: 'auto', // Retiré, car le parent flexbox devrait gérer le centrage
+          boxSizing: 'border-box',
+          flexShrink: 0, // Empêche le Paper de rétrécir si l'espace est limité
+        }}
+      >
         <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
           Register
         </Typography>
@@ -56,7 +69,6 @@ const RegisterPage = () => {
             onChange={(e) => setName(e.target.value)}
             required
           />
-          {/* CHANGEMENT ICI : label et type pour l'email */}
           <TextField
             label="Email"
             variant="outlined"
@@ -65,7 +77,7 @@ const RegisterPage = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            type="email" // Utilise type="email" pour la validation côté client
+            type="email"
           />
           <TextField
             label="Password"

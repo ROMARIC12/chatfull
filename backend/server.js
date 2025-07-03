@@ -5,7 +5,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const User = require('./models/User'); // Import User model to update status
 
-const PORT = process.env.PORT || 3000; // Utilise directement le port du .env
+const PORT = process.env.PORT ; // Utilise directement le port du .env
 
 // Connect to MongoDB
 connectDB();
@@ -16,7 +16,7 @@ const server = http.createServer(app); // Crée le serveur HTTP avec l'app Expre
 const io = new Server(server, {
     pingTimeout: 60000,
     cors: {
-        origin: process.env.CLIENT_URL || "http://localhost:5173",
+        origin: process.env.CLIENT_URL ,
         credentials: true,
     },
 });

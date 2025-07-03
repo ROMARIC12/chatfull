@@ -3,13 +3,19 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Configure Multer for file uploads (existing code)
+// Configure Multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/profiles/');
+        const uploadPath = 'uploads/profiles/';
+        // Ensure the directory exists
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+        cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`);
+        // Use req.user._id instead of req.user.id for consistency if _id is used elsewhere
+        cb(null, `${req.user._id}-${Date.now()}${path.extname(file.originalname)}`);
     },
 });
 
@@ -29,16 +35,17 @@ const uploadProfilePicture = multer({
     },
 }).single('profilePicture');
 
+// NOUVEAU: Exporter le middleware Multer
+exports.uploadProfilePicture = uploadProfilePicture;
 
-// @desc    Update user profile (existing code)
+
+// @desc    Update user profile
 // @route   PUT /api/users/profile
 // @access  Private
 exports.updateUserProfile = async (req, res) => {
-    uploadProfilePicture(req, res, async (err) => {
-        if (err) {
-            return res.status(400).json({ message: err });
-        }
-
+    // Le traitement de l'upload est maintenant fait par le middleware AVANT cette fonction.
+    // Donc, req.file est déjà disponible ici.
+    try {
         const user = await User.findById(req.user._id);
 
         if (user) {
@@ -68,10 +75,13 @@ exports.updateUserProfile = async (req, res) => {
         } else {
             res.status(404).json({ message: 'User not found' });
         }
-    });
+    } catch (error) {
+        console.error("Error updating user profile:", error);
+        res.status(500).json({ message: 'Server error updating profile' });
+    }
 };
 
-// @desc    Search user by email (existing code)
+// @desc    Search user by email
 // @route   GET /api/users/search
 // @access  Private
 exports.searchUserByEmail = async (req, res) => {
@@ -100,13 +110,11 @@ exports.searchUserByEmail = async (req, res) => {
     }
 };
 
-// NOUVELLE FONCTION : Récupérer tous les utilisateurs (pour les contacts)
 // @desc    Get all users
 // @route   GET /api/users/all
-// @access  Private (authentifié)
+// @access  Private (authenticated)
 exports.getAllUsers = async (req, res) => {
     try {
-        // Exclure l'utilisateur actuel et les mots de passe
         const users = await User.find({ _id: { $ne: req.user._id } }).select('-password');
         res.status(200).json(users);
     } catch (error) {

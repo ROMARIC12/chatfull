@@ -15,24 +15,26 @@ import {
 } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../contexts/AuthContext';
-import axios from 'axios';
+// Pas besoin d'axios ici car la logique est déplacée vers AuthContext
+// import axios from 'axios';
 
 const SettingsPage = () => {
-  const { user, setUser } = useAuth();
+  const { user, setUser, updateProfile } = useAuth(); // AJOUTÉ updateProfile
   const [name, setName] = useState(user?.name || '');
   const [status, setStatus] = useState(user?.status || 'offline');
-  const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '/default-avatar.png');
+  const [profilePicturePreview, setProfilePicturePreview] = useState(user?.profilePicture || '/default-avatar.png'); // Renommé pour la clarté
   const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Géré localement pour le bouton
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL + '/users';
+  // API_URL n'est plus nécessaire ici, car updateProfile gère l'appel API
+  // const API_URL = import.meta.env.VITE_API_BASE_URL + '/users';
 
   const handleFileChange = (e) => {
     if (e.target.files[0]) {
       setFile(e.target.files[0]);
-      setProfilePicture(URL.createObjectURL(e.target.files[0])); // Show preview
+      setProfilePicturePreview(URL.createObjectURL(e.target.files[0])); // Show preview
     }
   };
 
@@ -42,27 +44,14 @@ const SettingsPage = () => {
     setError('');
     setSuccess('');
 
-    const formData = new FormData();
-    formData.append('name', name);
-    formData.append('status', status);
-    if (file) {
-      formData.append('profilePicture', file);
-    }
-
     try {
-      const config = {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${user.token}`,
-        },
-      };
-      const { data } = await axios.put(`${API_URL}/profile`, formData, config);
-      setUser({ ...user, ...data }); // Update user in context
-      localStorage.setItem('userInfo', JSON.stringify({ ...user, ...data })); // Update localStorage
+      // Appel à la fonction updateProfile du AuthContext
+      await updateProfile(name, status, file);
       setSuccess('Profile updated successfully!');
       setFile(null); // Clear file input after successful upload
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile');
+      // L'erreur est déjà une string grâce à AuthContext
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -71,8 +60,29 @@ const SettingsPage = () => {
   return (
     <Box sx={{ display: 'flex', width: '100vw', height: '100vh' }}>
       <Sidebar />
-      <Box sx={{ flexGrow: 1, padding: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f4f6f8' }}>
-        <Paper elevation={3} sx={{ padding: 4, borderRadius: 2, maxWidth: 600, width: '100%' }}>
+      <Box
+        sx={{
+          flexGrow: 1,
+          padding: 2, // Ajout de padding pour éviter que le contenu ne touche les bords sur mobile
+          boxSizing: 'border-box', // S'assurer que le padding est inclus dans la largeur/hauteur
+          display: 'flex',
+          flexDirection: 'column', // Important pour centrer verticalement avec justifyContent
+          justifyContent: 'center', // Centre verticalement le contenu
+          alignItems: 'center',   // Centre horizontalement le contenu
+          backgroundColor: '#f4f6f8',
+        }}
+      >
+        <Paper
+          elevation={3}
+          sx={{
+            padding: 4,
+            borderRadius: 2,
+            maxWidth: 600,
+            width: '100%',
+            boxSizing: 'border-box',
+            flexShrink: 0, // Empêche le Paper de rétrécir si l'espace est limité
+          }}
+        >
           <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
             Settings
           </Typography>
@@ -80,7 +90,7 @@ const SettingsPage = () => {
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <form onSubmit={handleSubmit}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-              <Avatar src={profilePicture} sx={{ width: 120, height: 120, mb: 2 }} />
+              <Avatar src={profilePicturePreview} sx={{ width: 120, height: 120, mb: 2 }} />
               <input
                 accept="image/*"
                 style={{ display: 'none' }}
