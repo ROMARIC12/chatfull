@@ -16,23 +16,22 @@ import {
   DialogActions,
   Chip,
   CircularProgress,
-  Divider, // Assurez-vous que Divider est importé
-  Avatar // Assurez-vous que Avatar est importé
+  Divider,
+  Avatar
 } from '@mui/material';
 import Sidebar from '../components/Sidebar';
-import { Add as AddIcon, Close as CloseIcon, GroupAdd as GroupAddIcon } from '@mui/icons-material'; // Import GroupAddIcon
+import { Add as AddIcon, Close as CloseIcon, GroupAdd as GroupAddIcon } from '@mui/icons-material';
 import { useChat } from '../contexts/ChatContext';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
 const GroupPage = () => {
   const { user } = useAuth();
-  // selectChat est maintenant la fonction à utiliser pour changer de chat
   const { createGroup, chats, selectedChat, selectChat, fetchMessages, publicGroups, addGroupMember } = useChat();
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [participants, setParticipants] = useState([]);
-  const [currentParticipantEmail, setCurrentParticipantEmail] = useState(''); // Renommé pour plus de clarté
+  const [currentParticipantEmail, setCurrentParticipantEmail] = useState('');
   const [searchError, setSearchError] = useState('');
   const [creationError, setCreationError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -83,7 +82,7 @@ const GroupPage = () => {
     }
     setLoading(true);
     try {
-      const allParticipantsIds = [...participants.map(p => p._id), user._id]; // Assurez-vous que l'utilisateur actuel est inclus
+      const allParticipantsIds = [...participants.map(p => p._id), user._id];
 
       const newGroup = await createGroup(groupName, groupDescription, allParticipantsIds);
       setGroupName('');
@@ -100,13 +99,17 @@ const GroupPage = () => {
   };
 
   const handleJoinGroup = async (groupId) => {
+    console.log(`DEBUG GroupPage: Attempting to join group: ${groupId}`);
     try {
+      setLoading(true); // Activer le chargement pour le bouton "Join"
       await addGroupMember(groupId, user._id); // Ajouter l'utilisateur actuel au groupe
-      // Après avoir rejoint, naviguer vers ce chat
-      await selectChat(groupId);
+      await selectChat(groupId); // Après avoir rejoint, naviguer vers ce chat
+      alert('You have successfully joined the group!'); // Utiliser une alerte temporaire
     } catch (error) {
       console.error('Error joining group:', error);
-      alert(error.response?.data?.message || 'Failed to join group.');
+      alert(error.response?.data?.message || 'Failed to join group.'); // Utiliser une alerte temporaire
+    } finally {
+      setLoading(false); // Désactiver le chargement
     }
   };
 
@@ -115,10 +118,11 @@ const GroupPage = () => {
   const allUserGroups = chats.filter(chat => chat.isGroupChat && !chat.isArchived && !chat.isPinned);
   const pinnedUserGroups = chats.filter(chat => chat.isGroupChat && chat.isPinned && !chat.isArchived);
 
-  // Filter public groups to show only those the user is NOT already a member of
-  const discoverableGroups = publicGroups.filter(group =>
-    !group.users.some(member => member._id === user._id)
-  );
+  // MAINTENANT, publicGroups contient TOUS les groupes publics,
+  // et nous ferons la vérification si l'utilisateur est membre directement dans le rendu.
+  // const discoverableGroups = publicGroups.filter(group =>
+  //   !group.users.some(member => member._id === user._id)
+  // );
 
 
   return (
@@ -144,8 +148,8 @@ const GroupPage = () => {
                     {pinnedUserGroups.map((group) => (
                         <ListItem
                             key={group._id}
-                            button
-                            onClick={() => selectChat(group._id)} // Utiliser selectChat
+                            component="button"
+                            onClick={() => selectChat(group._id)}
                             sx={{
                                 backgroundColor: selectedChat?._id === group._id ? '#e0e0e0' : 'transparent',
                                 '&:hover': { backgroundColor: '#f0f0f0' },
@@ -172,8 +176,8 @@ const GroupPage = () => {
             {allUserGroups.map((group) => (
                 <ListItem
                     key={group._id}
-                    button
-                    onClick={() => selectChat(group._id)} // Utiliser selectChat
+                    component="button"
+                    onClick={() => selectChat(group._id)}
                     sx={{
                         backgroundColor: selectedChat?._id === group._id ? '#e0e0e0' : 'transparent',
                         '&:hover': { backgroundColor: '#f0f0f0' },
@@ -191,49 +195,57 @@ const GroupPage = () => {
             <Divider sx={{ my: 2 }} />
 
             <Typography variant="subtitle2" sx={{ paddingBottom: 1, color: 'text.secondary' }}>Discover Public Groups</Typography>
-            {discoverableGroups.length === 0 && (
+            {publicGroups.length === 0 && ( // Utilise publicGroups directement ici
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     No public groups to discover at the moment.
                 </Typography>
             )}
-            {discoverableGroups.map((group) => (
-                <ListItem
-                    key={group._id}
-                    sx={{
-                        mb: 1,
-                        borderRadius: 1,
-                        border: '1px solid #e0e0e0', // Visually distinguish discoverable groups
-                    }}
-                    secondaryAction={
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<GroupAddIcon />}
-                            onClick={() => handleJoinGroup(group._id)}
-                            disabled={loading}
-                        >
-                            Join
-                        </Button>
-                    }
-                >
-                    <Avatar src="/group-avatar.png" sx={{ mr: 2 }} />
-                    <ListItemText
-                        primary={<Typography variant="subtitle1" fontWeight="bold">{group.chatName}</Typography>}
-                        secondary={
-                            <>
-                                <Typography component="span" variant="body2" color="text.secondary">
-                                    {group.users.length} members
-                                </Typography>
-                                {group.chatDescription && (
-                                    <Typography component="span" variant="caption" color="text.disabled" sx={{ display: 'block' }}>
-                                        {group.chatDescription}
-                                    </Typography>
-                                )}
-                            </>
+            {publicGroups.map((group) => { // Itère sur TOUS les groupes publics
+                const isMember = group.users.some(member => member._id === user._id);
+
+                return (
+                    <ListItem
+                        key={group._id}
+                        sx={{
+                            mb: 1,
+                            borderRadius: 1,
+                            border: '1px solid #e0e0e0',
+                        }}
+                        secondaryAction={
+                            isMember ? (
+                                <Chip label="Already a member" color="success" variant="outlined" size="small" />
+                            ) : (
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<GroupAddIcon />}
+                                    onClick={() => handleJoinGroup(group._id)}
+                                    disabled={loading}
+                                >
+                                    {loading ? <CircularProgress size={16} /> : 'Join'}
+                                </Button>
+                            )
                         }
-                    />
-                </ListItem>
-            ))}
+                    >
+                        <Avatar src="/group-avatar.png" sx={{ mr: 2 }} />
+                        <ListItemText
+                            primary={<Typography variant="subtitle1" fontWeight="bold">{group.chatName}</Typography>}
+                            secondary={
+                                <>
+                                    <Typography component="span" variant="body2" color="text.secondary">
+                                        {group.users.length} members
+                                    </Typography>
+                                    {group.chatDescription && (
+                                        <Typography component="span" variant="caption" color="text.disabled" sx={{ display: 'block' }}>
+                                            {group.chatDescription}
+                                        </Typography>
+                                    )}
+                                </>
+                            }
+                        />
+                    </ListItem>
+                );
+            })}
 
         </List>
       </Box>

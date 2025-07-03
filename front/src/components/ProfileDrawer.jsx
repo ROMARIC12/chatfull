@@ -116,8 +116,8 @@ const ProfileDrawer = ({ open, onClose }) => {
           <List>
             <ListItem>
               <ListItemText 
-                primary="Téléphone" 
-                secondary={user?.phone} 
+                primary="Email" 
+                secondary={user?.email} 
               />
               <IconButton>
                 <Star />

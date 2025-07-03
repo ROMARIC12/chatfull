@@ -15,13 +15,14 @@ const MessageSchema = new mongoose.Schema({
     },
     media: [
         {
-            type: {
-                type: String, // 'image', 'video', 'audio', 'document'
+            type: { // 'image', 'video', 'audio', 'document'
+                type: String,
                 enum: ['image', 'video', 'audio', 'document'],
             },
             url: String,
             fileName: String,
             fileSize: Number,
+            mimetype: String, // <-- AJOUTÉ : Ce champ est crucial pour le frontend
         },
     ],
     readBy: [

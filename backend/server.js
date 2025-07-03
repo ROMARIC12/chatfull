@@ -1,44 +1,47 @@
 require('dotenv').config();
-const app = require('./app'); // Express app
+const app = require('./app'); // Importe l'application Express
 const connectDB = require('./config/db');
 const http = require('http');
 const { Server } = require('socket.io');
 const User = require('./models/User'); // Import User model to update status
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000; // Utilise directement le port du .env
 
 // Connect to MongoDB
 connectDB();
 
-const server = http.createServer(app);
+const server = http.createServer(app); // Crée le serveur HTTP avec l'app Express
 
+// Crée l'instance Socket.IO
 const io = new Server(server, {
     pingTimeout: 60000,
     cors: {
-        origin: process.env.CLIENT_URL || "http://localhost:3000", // Adjust for your frontend URL
+        origin: process.env.CLIENT_URL || "http://localhost:5173",
         credentials: true,
     },
 });
 
-// Export io for use in controllers
-exports.io = io;
+console.log("SERVER DEBUG: Socket.IO instance created:", io);
+
+// Passe l'instance 'io' à l'application Express pour qu'elle puisse configurer ses routes
+// et les rendre disponibles aux contrôleurs.
+// Nous allons modifier app.js pour qu'il exporte une fonction qui prend 'io' en argument.
+app.setupRoutes(io); // APPEL CLÉ : Configure les routes de l'app avec l'instance io
 
 io.on('connection', (socket) => {
     console.log('Connected to socket.io');
 
-    // Setup user for private chat rooms
     socket.on('setup', async (userData) => {
         if (userData && userData._id) {
             socket.join(userData._id);
             console.log(`User ${userData.name} (ID: ${userData._id}) connected and joined room: ${userData._id}`);
 
-            // Update user status to online
             await User.findByIdAndUpdate(userData._id, { status: 'online' });
             io.emit('user status update', { userId: userData._id, status: 'online' });
             socket.emit('connected');
         } else {
             console.log('Invalid user data for setup');
-            socket.disconnect(); // Disconnect if no valid user data
+            socket.disconnect();
         }
     });
 
@@ -54,7 +57,6 @@ io.on('connection', (socket) => {
 
         chat.users.forEach((user) => {
             if (user._id === newMessageReceived.sender._id) return;
-
             socket.in(user._id).emit('message received', newMessageReceived);
         });
     });
@@ -67,7 +69,7 @@ io.on('connection', (socket) => {
     });
 
     socket.off('setup', async () => {
-        console.log('USER DISCONNECTED');
+        console.log('USER DISCONNECTED (via setup off)');
         if (socket.rooms) {
             const userId = Array.from(socket.rooms).find(room => room !== socket.id);
             if (userId) {
@@ -75,21 +77,13 @@ io.on('connection', (socket) => {
                 io.emit('user status update', { userId: userId, status: 'offline', lastSeen: Date.now() });
             }
         }
-        socket.leaveAll(); // Disconnect from all rooms
+        socket.leaveAll();
     });
 
     socket.on('disconnect', async () => {
         console.log('Client disconnected from Socket.IO');
-        // This 'disconnect' listener fires when the client explicitly disconnects or loses connection.
-        // The 'off' event listener above is specifically for the 'setup' event being turned off,
-        // which might indicate a user logging out or changing status.
-        // The more reliable place to update status on disconnect is the general 'disconnect' event.
-
-        // Find the user ID from the socket's joined rooms
-        // Note: When a user connects and calls 'setup', they join a room named after their _id.
-        // We can iterate through socket.rooms to find this.
         if (socket.rooms) {
-            const userId = Array.from(socket.rooms).find(room => room !== socket.id);
+            const userId = Array.from(socket.rooms).find(room => room !== socket.id && room.length === 24);
             if (userId) {
                 await User.findByIdAndUpdate(userId, { status: 'offline', lastSeen: Date.now() });
                 io.emit('user status update', { userId: userId, status: 'offline', lastSeen: Date.now() });
@@ -98,7 +92,10 @@ io.on('connection', (socket) => {
     });
 });
 
-
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// Nous n'exportons plus 'io' via module.exports ici.
+// 'io' est maintenant une variable locale à ce fichier, accessible par les fonctions de Socket.IO.
+// Pour les contrôleurs, nous allons le passer explicitement.

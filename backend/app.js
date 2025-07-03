@@ -3,38 +3,40 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const chatRoutes = require('./routes/chatRoutes');
-const messageRoutes = require('./routes/messageRoutes');
-const groupRoutes = require('./routes/groupRoutes'); // New group routes
-
 const app = express();
 
 // Set BASE_URL for media files
 process.env.BASE_URL = process.env.NODE_ENV === 'production'
-    ? 'YOUR_PRODUCTION_URL' // Replace with your production domain
-    : `http://localhost:${process.env.PORT || 5000}`;
-
+    ? 'YOUR_PRODUCTION_URL'
+    : `http://localhost:${process.env.PORT}`;
 
 // Middleware
-app.use(express.json()); // Body parser for JSON
+app.use(express.json());
 app.use(cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173", // Allow your frontend origin
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true,
 }));
 
 // Serve static files from the 'uploads' directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/groups', groupRoutes); // Use group routes
+// Définition des routes
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const messageRoutes = require('./routes/messageRoutes'); // Importez la fonction du routeur
+const groupRoutes = require('./routes/groupRoutes');
 
-// Basic route for testing
+// Cette fonction sera appelée par server.js pour configurer les routes avec l'instance io
+app.setupRoutes = (ioInstance) => { // Renommé 'io' en 'ioInstance' pour éviter la confusion
+    app.use('/api/auth', authRoutes);
+    app.use('/api/users', userRoutes);
+    app.use('/api/chats', chatRoutes);
+    app.use('/api/messages', messageRoutes(ioInstance)); // PASSE IO ICI
+    app.use('/api/groups', groupRoutes);
+};
+
+// Basic route for testing (reste ici car c'est une route de l'app Express)
 app.get('/', (req, res) => {
     res.send('API is running...');
 });
@@ -45,4 +47,4 @@ app.use((err, req, res, next) => {
     res.status(500).send('Something broke!');
 });
 
-module.exports = app;
+module.exports = app; // Exporte l'instance app

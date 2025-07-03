@@ -16,7 +16,7 @@ import {
   Call as CallIcon,
   Settings as SettingsIcon,
   ExitToApp as LogoutIcon,
-  Contacts as ContactsIcon, // NOUVEAU : Importez l'icône Contacts
+  Contacts as ContactsIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,7 +33,7 @@ const Sidebar = () => {
   const menuItems = [
     { text: 'Chats', icon: <ChatIcon />, path: '/app' },
     { text: 'Groups', icon: <PeopleIcon />, path: '/group' },
-    { text: 'Contacts', icon: <ContactsIcon />, path: '/contacts' }, // NOUVEAU : Ajout de l'item Contacts
+    { text: 'Contacts', icon: <ContactsIcon />, path: '/contacts' },
     { text: 'Calls', icon: <CallIcon />, path: '/call' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ];

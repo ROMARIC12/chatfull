@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 import { useSocket } from './SocketContext';
@@ -12,68 +12,114 @@ export const ChatProvider = ({ children }) => {
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [typingUsers, setTypingUsers] = useState({}); // {chatId: true/false}
-  const [publicGroups, setPublicGroups] = useState([]); // Nouveau state pour les groupes publics
+  const [typingUsers, setTypingUsers] = useState({});
+  const [publicGroups, setPublicGroups] = useState([]);
+  const [chatMedia, setChatMedia] = useState([]);
+  const [openChatMediaModal, setOpenChatMediaModal] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-  // Fonction pour récupérer les messages, stabilisée avec useCallback
+  const chatsRef = useRef(chats);
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+
   const fetchMessages = useCallback(async (chatId) => {
     if (!chatId || !user || !user.token) {
+        console.log("DEBUG ChatContext: fetchMessages called with missing chatId, user, or token.");
         setMessages([]);
         return;
     }
     try {
+      console.log(`DEBUG ChatContext: Attempting to fetch messages for chatId: ${chatId}`);
       const config = {
         headers: { Authorization: `Bearer ${user.token}` },
       };
       const { data } = await axios.get(`${API_BASE_URL}/messages/${chatId}`, config);
+      console.log("DEBUG ChatContext: Messages fetched successfully:", data);
       setMessages(data);
-      socket?.emit('join chat', chatId); // Utiliser l'opérateur optionnel pour socket
+      socket?.emit('join chat', chatId);
     } catch (error) {
-      console.error('Failed to fetch messages:', error);
+      console.error('ERROR ChatContext: Failed to fetch messages:', error);
       setMessages([]);
     }
-  }, [user, socket, API_BASE_URL]); // Dépendances de fetchMessages
+  }, [user, socket, API_BASE_URL]);
 
-  // Fonction pour sélectionner un chat et récupérer ses messages, stabilisée avec useCallback
-  // Ceci est crucial pour éviter les boucles de rendu en passant une référence d'objet stable
+  const fetchChatMedia = useCallback(async (chatId) => {
+    if (!chatId || !user || !user.token) {
+      console.log("DEBUG ChatContext: fetchChatMedia called with missing chatId, user, or token.");
+      setChatMedia([]);
+      return;
+    }
+    try {
+      console.log(`DEBUG ChatContext: Attempting to fetch media for chatId: ${chatId}`);
+      const config = {
+        headers: { Authorization: `Bearer ${user.token}` },
+      };
+      const { data } = await axios.get(`${API_BASE_URL}/chats/${chatId}/media`, config);
+      console.log("DEBUG ChatContext: Media fetched successfully:", data);
+      setChatMedia(data);
+    } catch (error) {
+      console.error('ERROR ChatContext: Failed to fetch chat media:', error);
+      setChatMedia([]);
+    }
+  }, [user, API_BASE_URL]);
+
+
   const selectChat = useCallback(async (chatId) => {
-    const chatToSelect = chats.find(chat => chat._id === chatId);
+    console.log(`DEBUG ChatContext: selectChat called for chatId: ${chatId}`);
+    const chatToSelect = chatsRef.current.find(chat => chat._id === chatId);
     if (chatToSelect) {
-        setSelectedChat(chatToSelect); // Définir le chat sélectionné à partir du tableau 'chats' existant
-        await fetchMessages(chatId); // Récupérer les messages pour ce chat
+        // Vérifier si l'utilisateur est membre avant de sélectionner
+        const isMember = chatToSelect.users.some(member => member._id === user._id);
+        if (!isMember && chatToSelect.isGroupChat) {
+            console.log("DEBUG ChatContext: User is not a member of this group, cannot select chat.");
+            setSelectedChat(null);
+            setMessages([]);
+            setChatMedia([]);
+            alert("You are no longer a member of this group."); // Notification à l'utilisateur
+            return;
+        }
+
+        setSelectedChat(chatToSelect);
+        await fetchMessages(chatId);
+        await fetchChatMedia(chatId);
     } else {
+        console.log("DEBUG ChatContext: No chat found for selected chatId, resetting.");
         setSelectedChat(null);
         setMessages([]);
+        setChatMedia([]);
     }
-  }, [chats, fetchMessages]); // Dépend de 'chats' pour trouver l'objet, et de 'fetchMessages'
+  }, [fetchMessages, fetchChatMedia, setMessages, setChatMedia, user]); // Ajout de 'user' aux dépendances
 
   // Fetch chats on user login
   useEffect(() => {
     const fetchUserChats = async () => {
       if (user && user.token) {
+        console.log("DEBUG ChatContext: Fetching user chats...");
         try {
           const config = {
             headers: { Authorization: `Bearer ${user.token}` },
           };
           const { data } = await axios.get(`${API_BASE_URL}/chats`, config);
-          // Dédupliquer les chats au chargement initial
           const uniqueChatsMap = new Map();
           data.forEach(chat => uniqueChatsMap.set(chat._id, chat));
           setChats(Array.from(uniqueChatsMap.values()));
+          console.log("DEBUG ChatContext: User chats fetched successfully:", data);
         } catch (error) {
-          console.error('Failed to fetch chats:', error);
+          console.error('ERROR ChatContext: Failed to fetch chats:', error);
           if (error.response && error.response.status === 401) {
               console.log('Token invalid or expired, please log in again.');
           }
         }
       } else {
+        console.log("DEBUG ChatContext: User not logged in, clearing chat states.");
         setChats([]);
         setSelectedChat(null);
         setMessages([]);
         setNotifications([]);
         setTypingUsers({});
+        setChatMedia([]);
       }
     };
     fetchUserChats();
@@ -83,14 +129,16 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     const fetchAllPublicGroups = async () => {
       if (user && user.token) {
+        console.log("DEBUG ChatContext: Fetching all public groups...");
         try {
           const config = {
             headers: { Authorization: `Bearer ${user.token}` },
           };
-          const { data } = await axios.get(`${API_BASE_URL}/chats/all-groups`, config); // Endpoint à créer au backend
+          const { data } = await axios.get(`${API_BASE_URL}/chats/all-groups`, config);
           setPublicGroups(data);
+          console.log("DEBUG ChatContext: Public groups fetched successfully:", data);
         } catch (error) {
-          console.error('Failed to fetch public groups:', error);
+          console.error('ERROR ChatContext: Failed to fetch public groups:', error);
         }
       } else {
         setPublicGroups([]);
@@ -104,6 +152,17 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     if (socket) {
       socket.on('message received', (newMessageReceived) => {
+        console.log("DEBUG ChatContext: Socket 'message received' event:", newMessageReceived);
+
+        // NOUVEAU: Vérifier si l'utilisateur est membre du chat AVANT d'ajouter le message
+        const chatAffected = chatsRef.current.find(chat => chat._id === newMessageReceived.chat._id);
+        const isUserMemberOfAffectedChat = chatAffected?.users.some(member => member._id === user._id);
+
+        if (chatAffected && chatAffected.isGroupChat && !isUserMemberOfAffectedChat) {
+            console.log("DEBUG ChatContext: User is not a member of this group, ignoring received message.");
+            return; // Ne pas traiter le message si l'utilisateur n'est plus membre du groupe
+        }
+
         // Mettre à jour le dernier message dans la liste des chats
         setChats(prevChats => prevChats.map(chat =>
             chat._id === newMessageReceived.chat._id
@@ -113,18 +172,34 @@ export const ChatProvider = ({ children }) => {
 
         // Si le message est pour le chat actuellement sélectionné, l'ajouter aux messages
         if (selectedChat && selectedChat._id === newMessageReceived.chat._id) {
-          // Vérifier si le message n'est pas déjà dans l'état pour éviter les doublons
-          // (utile si l'émetteur reçoit aussi son propre message via socket)
           setMessages(prevMessages => {
-            if (!prevMessages.some(msg => msg._id === newMessageReceived._id)) {
+            const messageExists = prevMessages.some(msg => msg._id === newMessageReceived._id);
+            if (!messageExists) {
+              console.log("DEBUG ChatContext: Adding new message to state (selected chat).");
               return [...prevMessages, newMessageReceived];
             }
+            console.log("DEBUG ChatContext: Message already exists in state, skipping (selected chat).");
             return prevMessages;
           });
+          // Si c'est un média, mettre à jour la liste des médias du chat
+          if (newMessageReceived.media && newMessageReceived.media.length > 0) {
+            setChatMedia(prevMedia => [...prevMedia, ...newMessageReceived.media.map(m => ({
+                _id: m._id,
+                type: m.type,
+                url: m.url,
+                fileName: m.fileName,
+                fileSize: m.fileSize,
+                mimetype: m.mimetype,
+                sender: newMessageReceived.sender ? newMessageReceived.sender.name : 'Unknown',
+                createdAt: newMessageReceived.createdAt
+            }))]);
+          }
         } else {
-          // Ajouter aux notifications si pas dans le chat actuel ET pas déjà notifié
           if (!notifications.some(notif => notif._id === newMessageReceived._id)) {
+            console.log("DEBUG ChatContext: Adding new message to notifications.");
             setNotifications(prev => [newMessageReceived, ...prev]);
+          } else {
+            console.log("DEBUG ChatContext: Message already exists in notifications, skipping.");
           }
         }
       });
@@ -145,6 +220,7 @@ export const ChatProvider = ({ children }) => {
       });
 
       socket.on('message read', ({ messageId, userId }) => {
+        console.log(`DEBUG ChatContext: Socket 'message read' event for message ${messageId} by user ${userId}`);
         setMessages(prevMessages => prevMessages.map(msg =>
             msg._id === messageId && !msg.readBy.includes(userId)
                 ? { ...msg, readBy: [...msg.readBy, userId] }
@@ -152,28 +228,29 @@ export const ChatProvider = ({ children }) => {
         ));
       });
 
-      // Gérer la mise à jour d'un chat (ex: renommage de groupe, épinglage, archivage)
       socket.on('chat updated', (updatedChat) => {
+        console.log("DEBUG ChatContext: Socket 'chat updated' event:", updatedChat);
         setChats(prevChats => prevChats.map(chat =>
           chat._id === updatedChat._id ? updatedChat : chat
         ));
-        // Si le chat mis à jour est celui sélectionné, le mettre à jour aussi
         if (selectedChat && selectedChat._id === updatedChat._id) {
           setSelectedChat(updatedChat);
         }
       });
 
-      // Gérer la suppression d'un chat (ex: suppression de groupe)
       socket.on('chat deleted', (deletedChatId) => {
+        console.log("DEBUG ChatContext: Socket 'chat deleted' event:", deletedChatId);
         setChats(prevChats => prevChats.filter(chat => chat._id !== deletedChatId));
         if (selectedChat && selectedChat._id === deletedChatId) {
           setSelectedChat(null);
           setMessages([]);
+          setChatMedia([]);
         }
       });
 
 
       return () => {
+        console.log("DEBUG ChatContext: Cleaning up socket listeners.");
         socket.off('message received');
         socket.off('typing');
         socket.off('stop typing');
@@ -182,13 +259,16 @@ export const ChatProvider = ({ children }) => {
         socket.off('chat deleted');
       };
     }
-  }, [socket, selectedChat, notifications, user]); // selectedChat est une dépendance car il est utilisé dans le callback
+  }, [socket, selectedChat, notifications, user, chatsRef.current]); // Ajout de chatsRef.current aux dépendances
 
 
-  // Fonction pour envoyer un message (texte), stabilisée avec useCallback
   const sendMessage = useCallback(async (content, chatId) => {
-    if (!content || !chatId || !user || !user.token) return;
+    if (!content || !chatId || !user || !user.token) {
+        console.log("DEBUG ChatContext: sendMessage called with missing content, chatId, user, or token.");
+        return;
+    }
     try {
+      console.log(`DEBUG ChatContext: Attempting to send text message to chatId: ${chatId}`);
       const config = {
         headers: {
           'Content-Type': 'application/json',
@@ -196,6 +276,7 @@ export const ChatProvider = ({ children }) => {
         },
       };
       const { data } = await axios.post(`${API_BASE_URL}/messages`, { content, chatId }, config);
+      console.log("DEBUG ChatContext: Text message sent successfully, adding to state:", data);
       setMessages(prevMessages => [...prevMessages, data]);
       setChats(prevChats => prevChats.map(chat =>
         chat._id === chatId ? { ...chat, latestMessage: data } : chat
@@ -203,41 +284,60 @@ export const ChatProvider = ({ children }) => {
       socket?.emit('new message', data);
       return data;
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error('ERROR ChatContext: Failed to send text message:', error);
       throw error;
     }
-  }, [user, socket, API_BASE_URL]); // Dépendances de sendMessage
+  }, [user, socket, API_BASE_URL]);
 
-  // Fonction pour envoyer des médias, stabilisée avec useCallback
   const sendMedia = useCallback(async (mediaFiles, chatId) => {
-    if (!mediaFiles || mediaFiles.length === 0 || !chatId || !user || !user.token) return;
+    if (!mediaFiles || mediaFiles.length === 0 || !chatId || !user || !user.token) {
+        console.log("DEBUG ChatContext: sendMedia called with missing mediaFiles, chatId, user, or token.");
+        return;
+    }
     try {
+      console.log(`DEBUG ChatContext: Attempting to send media files to chatId: ${chatId}`);
       const formData = new FormData();
       formData.append('chatId', chatId);
       mediaFiles.forEach(file => formData.append('media', file));
 
       const config = {
         headers: {
-          'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${user.token}`,
         },
       };
       const { data } = await axios.post(`${API_BASE_URL}/messages/media`, formData, config);
+      console.log("DEBUG ChatContext: Media message sent successfully, adding to state:", data);
       setMessages(prevMessages => [...prevMessages, data]);
       setChats(prevChats => prevChats.map(chat =>
         chat._id === chatId ? { ...chat, latestMessage: data } : chat
       ));
+      if (data.media && data.media.length > 0) {
+        setChatMedia(prevMedia => [...prevMedia, ...data.media.map(m => ({
+            _id: m._id,
+            type: m.type,
+            url: m.url,
+            fileName: m.fileName,
+            fileSize: m.fileSize,
+            mimetype: m.mimetype,
+            sender: data.sender ? data.sender.name : 'Unknown',
+            createdAt: data.createdAt
+        }))]);
+      }
       socket?.emit('new message', data);
       return data;
     } catch (error) {
-      console.error('Failed to send media:', error);
+      console.error('ERROR ChatContext: Failed to send media:', error);
       throw error;
     }
-  }, [user, socket, API_BASE_URL]); // Dépendances de sendMedia
+  }, [user, socket, API_BASE_URL]);
 
   const markMessageAsRead = useCallback(async (messageId, chatId) => {
-    if (!messageId || !chatId || !user || !user.token) return;
+    if (!messageId || !chatId || !user || !user.token) {
+        console.log("DEBUG ChatContext: markMessageAsRead called with missing messageId, chatId, user, or token.");
+        return;
+    }
     try {
+      console.log(`DEBUG ChatContext: Attempting to mark message ${messageId} as read.`);
       const config = {
         headers: { Authorization: `Bearer ${user.token}` },
       };
@@ -248,13 +348,13 @@ export const ChatProvider = ({ children }) => {
           : msg
       ));
       socket?.emit('message read', { messageId, userId: user._id, chatId });
+      console.log(`DEBUG ChatContext: Message ${messageId} marked as read successfully.`);
     } catch (error) {
-      console.error('Failed to mark message as read:', error);
+      console.error('ERROR ChatContext: Failed to mark message as read:', error);
     }
-  }, [user, socket, API_BASE_URL]); // Dépendances de markMessageAsRead
+  }, [user, socket, API_BASE_URL]);
 
 
-  // Fonction pour créer un chat 1-to-1, stabilisée avec useCallback
   const createChat = useCallback(async (userId) => {
     if (!user || !user.token) return;
     try {
@@ -272,15 +372,14 @@ export const ChatProvider = ({ children }) => {
             }
             return [data, ...prevChats];
         });
-        await selectChat(data._id); // Utiliser la fonction selectChat pour la stabilité
+        await selectChat(data._id);
         return data;
     } catch (error) {
         console.error('Failed to create chat:', error);
         throw error;
     }
-  }, [user, API_BASE_URL, selectChat]); // Dépend de selectChat
+  }, [user, API_BASE_URL, selectChat]);
 
-  // Fonction pour créer un groupe, stabilisée avec useCallback
   const createGroup = useCallback(async (name, description, participants) => {
     if (!user || !user.token) return;
     try {
@@ -302,16 +401,15 @@ export const ChatProvider = ({ children }) => {
             }
             return [data, ...prevChats];
         });
-        await selectChat(data._id); // Utiliser la fonction selectChat pour la stabilité
+        await selectChat(data._id);
         return data;
     } catch (error) {
         console.error('Failed to create group:', error);
         throw error;
     }
-  }, [user, API_BASE_URL, selectChat]); // Dépend de selectChat
+  }, [user, API_BASE_URL, selectChat]);
 
-  // Fonction pour épingler un chat, stabilisée avec useCallback
-  const pinChat = useCallback(async (chatId) => {
+const pinChat = useCallback(async (chatId) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -322,10 +420,9 @@ export const ChatProvider = ({ children }) => {
     } catch (error) {
         console.error('Failed to pin chat:', error);
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL]);
 
-  // Fonction pour archiver un chat, stabilisée avec useCallback
-  const archiveChat = useCallback(async (chatId) => {
+const archiveChat = useCallback(async (chatId) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -336,10 +433,9 @@ export const ChatProvider = ({ children }) => {
     } catch (error) {
         console.error('Failed to archive chat:', error);
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL]);
 
-  // Fonction pour mettre à jour un groupe, stabilisée avec useCallback
-  const updateGroup = useCallback(async (groupId, name, description) => {
+const updateGroup = useCallback(async (groupId, name, description) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -347,16 +443,15 @@ export const ChatProvider = ({ children }) => {
         setChats(prevChats => prevChats.map(chat =>
             chat._id === groupId ? { ...chat, chatName: data.chatName, chatDescription: data.chatDescription } : chat
         ));
-        setSelectedChat(data); // Update selected chat if it's the current group
+        setSelectedChat(data);
         return data;
     } catch (error) {
         console.error('Failed to update group:', error);
         throw error;
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL]);
 
-  // Fonction pour ajouter un membre à un groupe, stabilisée avec useCallback
-  const addGroupMember = useCallback(async (groupId, userIdToAdd) => {
+const addGroupMember = useCallback(async (groupId, userIdToAdd) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -370,22 +465,34 @@ export const ChatProvider = ({ children }) => {
         console.error('Failed to add group member:', error);
         throw error;
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL]);
 
-  // Fonction pour retirer un membre d'un groupe, stabilisée avec useCallback
-  const removeGroupMember = useCallback(async (groupId, userIdToRemove) => {
+const removeGroupMember = useCallback(async (groupId, userIdToRemove) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
         const { data } = await axios.put(`${API_BASE_URL}/groups/${groupId}/remove`, { userId: userIdToRemove }, config);
-        if (data.message && data.message.includes('Group deleted')) {
-            setChats(prevChats => prevChats.filter(chat => chat._id !== groupId));
+
+        // NOUVEAU: Mettre à jour les chats et potentiellement désélectionner le chat
+        setChats(prevChats => {
+            const updatedChats = prevChats.map(chat =>
+                chat._id === groupId ? { ...chat, users: data.users } : chat
+            );
+            // Si l'utilisateur actuel est celui qui est retiré, filtrer le chat de la liste
+            if (userIdToRemove === user._id) {
+                return updatedChats.filter(chat => chat._id !== groupId);
+            }
+            return updatedChats;
+        });
+
+        // NOUVEAU: Si l'utilisateur actuel est celui qui est retiré, désélectionner le chat et vider les messages
+        if (userIdToRemove === user._id) {
             setSelectedChat(null);
             setMessages([]);
-        } else {
-            setChats(prevChats => prevChats.map(chat =>
-                chat._id === groupId ? { ...chat, users: data.users } : chat
-            ));
+            setChatMedia([]);
+            alert("You have been removed from the group or have left the group."); // Notifier l'utilisateur
+        } else if (selectedChat && selectedChat._id === groupId) {
+            // Si le chat est sélectionné et qu'un AUTRE membre est retiré, mettre à jour le selectedChat
             setSelectedChat(data);
         }
         return data;
@@ -393,10 +500,9 @@ export const ChatProvider = ({ children }) => {
         console.error('Failed to remove group member:', error);
         throw error;
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL, selectedChat, setMessages, setChatMedia]); // Ajout de setMessages et setChatMedia aux dépendances
 
-  // Fonction pour supprimer un groupe, stabilisée avec useCallback
-  const deleteGroup = useCallback(async (groupId) => {
+const deleteGroup = useCallback(async (groupId) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -404,14 +510,14 @@ export const ChatProvider = ({ children }) => {
         setChats(prevChats => prevChats.filter(chat => chat._id !== groupId));
         setSelectedChat(null);
         setMessages([]);
+        setChatMedia([]);
     } catch (error) {
         console.error('Failed to delete group:', error);
         throw error;
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL]);
 
-  // Fonction pour transférer l'admin d'un groupe, stabilisée avec useCallback
-  const transferGroupAdmin = useCallback(async (groupId, newAdminId) => {
+const transferGroupAdmin = useCallback(async (groupId, newAdminId) => {
     if (!user || !user.token) return;
     try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -425,7 +531,7 @@ export const ChatProvider = ({ children }) => {
         console.error('Failed to transfer group admin:', error);
         throw error;
     }
-  }, [user, API_BASE_URL]);
+}, [user, API_BASE_URL]);
 
 
   return (
@@ -434,7 +540,7 @@ export const ChatProvider = ({ children }) => {
         chats,
         setChats,
         selectedChat,
-        setSelectedChat, // setSelectedChat est toujours exposé pour les usages directs si nécessaire
+        setSelectedChat,
         messages,
         setMessages,
         notifications,
@@ -453,8 +559,12 @@ export const ChatProvider = ({ children }) => {
         removeGroupMember,
         deleteGroup,
         transferGroupAdmin,
-        selectChat, // Exposer la nouvelle fonction selectChat
-        publicGroups, // Exposer les groupes publics
+        selectChat,
+        publicGroups,
+        chatMedia,
+        fetchChatMedia,
+        openChatMediaModal,
+        setOpenChatMediaModal,
       }}
     >
       {children}

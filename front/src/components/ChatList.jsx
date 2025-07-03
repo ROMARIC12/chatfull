@@ -17,11 +17,13 @@ import { Search as SearchIcon, Add as AddIcon, Archive as ArchiveIcon } from '@m
 import ChatListItem from './ChatListItem';
 import { useChat } from '../contexts/ChatContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext'; // NOUVEAU: Import de useSocket
 import axios from 'axios';
 
 const ChatList = () => {
   const { chats, setChats, selectedChat, setSelectedChat, notifications, setNotifications, createChat } = useChat();
   const { user } = useAuth();
+  const { onlineUsers } = useSocket(); // NOUVEAU: Accès à onlineUsers
   const [searchTerm, setSearchTerm] = useState('');
   const [openNewChatDialog, setOpenNewChatDialog] = useState(false);
   const [newChatPhone, setNewChatPhone] = useState('');
@@ -100,6 +102,7 @@ const ChatList = () => {
                         onSelect={() => handleSelectChat(chat)}
                         isSelected={selectedChat?._id === chat._id}
                         unreadCount={notifications.filter(n => n.chat._id === chat._id).length}
+                        onlineUsers={onlineUsers} // NOUVEAU: Passe onlineUsers
                     />
                 ))}
                 <Divider />
@@ -119,6 +122,7 @@ const ChatList = () => {
             onSelect={() => handleSelectChat(chat)}
             isSelected={selectedChat?._id === chat._id}
             unreadCount={notifications.filter(n => n.chat._id === chat._id).length}
+            onlineUsers={onlineUsers} // NOUVEAU: Passe onlineUsers
           />
         ))}
 
@@ -133,6 +137,7 @@ const ChatList = () => {
                         onSelect={() => handleSelectChat(chat)}
                         isSelected={selectedChat?._id === chat._id}
                         unreadCount={notifications.filter(n => n.chat._id === chat._id).length}
+                        onlineUsers={onlineUsers} // NOUVEAU: Passe onlineUsers
                     />
                 ))}
             </>

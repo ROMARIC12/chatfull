@@ -54,7 +54,8 @@ const ContactsPage = () => {
 
   const handleCreatePrivateChat = async (targetUserId) => {
     try {
-      await createChat(targetUserId); // createChat utilise déjà selectChat
+      // createChat est déjà conçu pour sélectionner le chat après création
+      await createChat(targetUserId);
     } catch (err) {
       console.error('Error creating private chat:', err);
       setError(err.response?.data?.message || 'Failed to start chat.');

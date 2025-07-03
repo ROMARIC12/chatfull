@@ -17,11 +17,11 @@ import {
   Chip,
   CircularProgress,
   IconButton,
-  ListItemAvatar, // <--- AJOUTEZ CECI
-  MenuItem, // Assurez-vous que MenuItem est aussi importé si utilisé dans le Select
-  Select, // Assurez-vous que Select est aussi importé si utilisé
-  FormControl, // Assurez-vous que FormControl est aussi importé si utilisé
-  InputLabel // Assurez-vous que InputLabel est aussi importé si utilisé
+  ListItemAvatar,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import {
   Call as CallIcon,
@@ -33,6 +33,10 @@ import {
   Edit as EditIcon,
   VerifiedUser as AdminIcon,
   Group as GroupIcon,
+  Image as ImageIcon, // Ajouté pour l'icône de média
+  InsertDriveFile as DocumentIcon, // Ajouté pour l'icône de document
+  Audiotrack as AudioIcon, // Ajouté pour l'icône audio
+  Videocam as VideoIcon, // Ajouté pour l'icône vidéo
 } from '@mui/icons-material';
 import { useChat } from '../contexts/ChatContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -40,13 +44,13 @@ import axios from 'axios';
 
 const ContactInfo = () => {
   const { user: currentUser } = useAuth();
-  const { selectedChat, updateGroup, addGroupMember, removeGroupMember, deleteGroup, transferGroupAdmin, fetchMessages } = useChat();
+  const { selectedChat, updateGroup, addGroupMember, removeGroupMember, deleteGroup, transferGroupAdmin, fetchMessages, chatMedia, setOpenChatMediaModal, setSelectedChat } = useChat(); // AJOUTÉ chatMedia et setOpenChatMediaModal
   const [openGroupEditDialog, setOpenGroupEditDialog] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [groupParticipants, setGroupParticipants] = useState([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
-  const [newMemberPhone, setNewMemberPhone] = useState(''); // Considérez de renommer en newMemberEmail
+  const [newMemberEmail, setNewMemberEmail] = useState(''); // Renommé de newMemberPhone
   const [newMemberError, setNewMemberError] = useState('');
   const [transferAdminId, setTransferAdminId] = useState('');
   const [openTransferAdminDialog, setOpenTransferAdminDialog] = useState(false);
@@ -98,12 +102,11 @@ const ContactInfo = () => {
                 Authorization: `Bearer ${currentUser.token}`,
             },
         };
-        // First, find the user by email address
-        const { data: userToAdd } = await axios.get(`${API_BASE_URL}/users/search?email=${newMemberPhone}`, config); // newMemberPhone est en fait l'email
+        const { data: userToAdd } = await axios.get(`${API_BASE_URL}/users/search?email=${newMemberEmail}`, config); // Utilise newMemberEmail
 
         if (userToAdd && userToAdd._id) {
             await addGroupMember(selectedChat._id, userToAdd._id);
-            setNewMemberPhone('');
+            setNewMemberEmail('');
             fetchGroupParticipants(); // Re-fetch participants to update list
         } else {
             setNewMemberError('User with this email not found.');
@@ -129,6 +132,7 @@ const ContactInfo = () => {
   };
 
   const handleDeleteGroup = async () => {
+    // Remplacé window.confirm par une modale personnalisée si vous en avez une, sinon gardez window.confirm
     if (window.confirm('Are you sure you want to delete this group? This action cannot be undone.')) {
       try {
         await deleteGroup(selectedChat._id);
@@ -142,7 +146,7 @@ const ContactInfo = () => {
 
   const handleTransferAdmin = async () => {
     if (!transferAdminId) {
-        alert('Please select a new admin.');
+        alert('Please select a new admin.'); // Remplacer par une modale si possible
         return;
     }
     if (window.confirm('Are you sure you want to transfer admin rights? You will no longer be an admin.')) {
@@ -156,6 +160,17 @@ const ContactInfo = () => {
     }
   };
 
+  // Fonction pour afficher l'icône appropriée pour le type de média
+  const getMediaIcon = (type) => {
+    switch (type) {
+      case 'image': return <ImageIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
+      case 'video': return <VideoIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
+      case 'audio': return <AudioIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
+      case 'document': return <DocumentIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
+      default: return <ImageIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
+    }
+  };
+
   if (!selectedChat) {
     return (
       <Box sx={{ width: '350px', borderLeft: '1px solid #e0e0e0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -165,6 +180,9 @@ const ContactInfo = () => {
       </Box>
     );
   }
+
+  // Prendre les 4 premiers médias pour l'aperçu
+  const mediaPreview = chatMedia.slice(0, 4);
 
   return (
     <Box sx={{ width: '350px', borderLeft: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column' }}>
@@ -223,7 +241,7 @@ const ContactInfo = () => {
                                 </Button>
                             ) : null
                         }>
-                            <ListItemAvatar> {/* Ceci est le composant qui manquait */}
+                            <ListItemAvatar>
                                 <Avatar src={member.profilePicture || '/default-avatar.png'} />
                             </ListItemAvatar>
                             <ListItemText
@@ -247,8 +265,8 @@ const ContactInfo = () => {
                     <TextField
                         size="small"
                         placeholder="Add member by email"
-                        value={newMemberPhone}
-                        onChange={(e) => setNewMemberPhone(e.target.value)}
+                        value={newMemberEmail} // Utilise newMemberEmail
+                        onChange={(e) => setNewMemberEmail(e.target.value)} // Utilise setNewMemberEmail
                         error={!!newMemberError}
                         helperText={newMemberError}
                         sx={{ flexGrow: 1, mr: 1 }}
@@ -293,14 +311,43 @@ const ContactInfo = () => {
           </>
         )}
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }} onClick={() => console.log("Implement media modal here")}>
-          Media, Links & Docs
+        <Typography
+            variant="subtitle2"
+            sx={{ fontWeight: 'bold', mb: 1, cursor: 'pointer' }}
+            onClick={() => setOpenChatMediaModal(true)} // Ouvre la modale des médias de ChatWindow
+        >
+          Media, Links & Docs ({chatMedia.length})
         </Typography>
-        {/* Placeholder for Media, Links & Docs - add actual media display later */}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-          {/* Example media items (replace with dynamic data from chatMedia in ChatWindow) */}
-          <img src="https://via.placeholder.com/60" alt="media" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4 }} />
-          <img src="https://via.placeholder.com/60" alt="media" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4 }} />
+          {mediaPreview.length > 0 ? (
+            mediaPreview.map((media, index) => (
+              <Box key={index} sx={{ width: 60, height: 60, overflow: 'hidden', borderRadius: 1, border: '1px solid #e0e0e0', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+                {media.type === 'image' && (
+                  <img src={media.url} alt={media.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+                {media.type === 'video' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                    {getMediaIcon('video')}
+                    <Typography variant="caption" sx={{ fontSize: '0.6rem', textAlign: 'center', lineHeight: 1 }}>Video</Typography>
+                  </Box>
+                )}
+                {media.type === 'audio' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                    {getMediaIcon('audio')}
+                    <Typography variant="caption" sx={{ fontSize: '0.6rem', textAlign: 'center', lineHeight: 1 }}>Audio</Typography>
+                  </Box>
+                )}
+                {media.type === 'document' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                    {getMediaIcon('document')}
+                    <Typography variant="caption" sx={{ fontSize: '0.6rem', textAlign: 'center', lineHeight: 1 }}>Doc</Typography>
+                  </Box>
+                )}
+              </Box>
+            ))
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>No media shared yet.</Typography>
+          )}
         </Box>
         <Divider sx={{ mb: 2 }} />
 
