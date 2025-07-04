@@ -7,7 +7,7 @@ const app = express();
 
 // Set BASE_URL for media files
 process.env.BASE_URL = process.env.NODE_ENV === 'production'
-    ? 'YOUR_PRODUCTION_URL'
+    ? 'https://chatapp-ec62.onrender.com'
     : `http://localhost:${process.env.PORT}`;
 
 // Middleware
